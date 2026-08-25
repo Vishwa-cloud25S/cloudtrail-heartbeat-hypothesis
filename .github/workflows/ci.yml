@@ -27,7 +27,7 @@ jobs:
           tar xzf /tmp/actionlint.tar.gz -C /tmp
           /tmp/actionlint --version
       - name: Lint
-        run: /tmp/actionlint .github/workflows/
+        run: /tmp/actionlint .github/workflows/*.yaml .github/workflows/*.yml
 
   terraform:
     name: Terraform validate
