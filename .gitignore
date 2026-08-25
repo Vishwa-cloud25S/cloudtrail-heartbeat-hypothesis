@@ -1,0 +1,22 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+.terraform.lock.hcl
+
+# Python
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+
+# Notebooks / local analysis scratch
+*.ipynb
+analysis/.local/
+*.png.bak
+
+# Environment / credentials — never commit these
+.env
+.aws/
+*.pem
+aws_config.json
