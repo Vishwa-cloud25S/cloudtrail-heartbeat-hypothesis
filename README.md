@@ -13,6 +13,8 @@ He ended that post with an open question:
 This repo is a self-contained, reproducible attempt to answer it with real data
 using his own methodology and plotting style.
 
+[![CI](https://github.com/Vishwa-cloud25S/cloudtrail-heartbeat-hypothesis/actions/workflows/ci.yml/badge.svg)](https://github.com/Vishwa-cloud25S/cloudtrail-heartbeat-hypothesis/actions/workflows/ci.yml)
+
 ---
 
 ## Why this matters
