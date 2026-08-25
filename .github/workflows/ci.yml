@@ -118,9 +118,9 @@ jobs:
       - name: Require AWS credentials
         if: env.HAS_AWS_CREDS != 'true'
         run: |
-          echo "::error::AWS credentials are not configured. Add repo secrets \
-AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY and AWS_REGION (Settings > Secrets \
-and variables > Actions), then re-run this workflow."
+          echo "::error::AWS credentials are not configured."
+          echo "Add repo secrets AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY and AWS_REGION"
+          echo "(Settings > Secrets and variables > Actions), then re-run this workflow."
           exit 1
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
