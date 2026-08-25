@@ -65,11 +65,25 @@ terraform/
   outputs.tf          bucket / trail / db / table / workgroup / lambda ARNs
 heartbeat/lambda/heartbeat.py    the noise generator (30s cadence, per-region)
 analysis/
+  partition_utils.py            dependency-light partition predicate helper (used by CI tests)
   run_analysis.py               runs the summary query per condition + plots the chart
   queries/01_summary_by_region.sql   delay stats by region (from Sam's notebook)
   queries/02_heartbeat_noise_events.sql  verify the noise events exist
+  queries/03_cloudtrail_lake_latency.sql  optional: S3 path vs CloudTrail Lake ingestion latency
+  tests/test_partition_predicate.py   partition predicate unit tests
+  tests/test_chart_smoke.py           synthetic chart render smoke test (no AWS)
+.github/workflows/ci.yml   CI: terraform validate + py compile + tests + optional real analysis
 requirements.txt          pandas/awswrangler/matplotlib stack
 ```
+
+### CI
+
+`.github/workflows/ci.yml` is green with **no secrets**. It runs `terraform fmt`
++ `terraform validate`, compiles the Python, runs the partition unit tests, and
+renders the chart from synthetic data as an AWS-free smoke test. The optional
+`analysis` job (manual dispatch) only runs if you supply AWS credentials + the
+experiment dates as repo secrets/vars — so the showcase repo never requires
+secrets just to pass CI.
 
 ## Setup
 

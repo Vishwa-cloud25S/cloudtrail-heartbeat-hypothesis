@@ -34,13 +34,15 @@ import os
 import pathlib
 from datetime import timedelta
 
-import awswrangler as wr
-import boto3
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib import cycler
 from matplotlib.ticker import PercentFormatter
+
+# Heavy AWS deps are imported lazily (inside functions) so the chart-only smoke
+# test in CI can run without boto3/awswrangler installed.
+from partition_utils import partition_predicate
 
 QUERY_DIR = pathlib.Path(__file__).parent / "queries"
 SUMMARY_TEMPLATE = (QUERY_DIR / "01_summary_by_region.sql").read_text()
@@ -52,10 +54,14 @@ SUMMARY_TEMPLATE = (QUERY_DIR / "01_summary_by_region.sql").read_text()
 
 def make_session(profile: str | None):
     """Build a boto3 session; None profile uses the default credential chain."""
+    import boto3
+
     return boto3.session.Session(profile_name=profile) if profile else boto3.session.Session()
 
 
 def run_query(session, query: str, database: str, workgroup: str, catalog: str) -> pd.DataFrame:
+    import awswrangler as wr
+
     return wr.athena.read_sql_query(
         query,
         database=database,
@@ -65,47 +71,6 @@ def run_query(session, query: str, database: str, workgroup: str, catalog: str) 
         athena_cache_settings={"max_cache_seconds": 60 * 60},
         ctas_approach=False,
     )
-
-
-def partition_predicate(start: str, end: str) -> str:
-    """
-    Turn a YYYY/MM/dd..YYYY/MM/dd window into a pruned predicate over the
-    partition columns (year, month, day). This is what lets Athena skip
-    partitions and keep scans/speed reasonable — the table partitions on
-    region/year/month/day, not on a single `eventdate`.
-    """
-    from datetime import date, timedelta
-
-    d0 = date.fromisoformat(start.replace("/", "-"))
-    d1 = date.fromisoformat(end.replace("/", "-"))
-    if d1 < d0:
-        raise ValueError(f"end ({end}) is before start ({start})")
-
-    # Group days into contiguous (year, month) segments -> day ranges.
-    segments = []
-    d = d0
-    current = None
-    while d <= d1:
-        key = (d.year, f"{d.month:02d}")
-        if current is None or current[0] != key:
-            if current is not None:
-                segments.append(current)
-            current = (key, d.day, d.day)
-        else:
-            current = (key, current[1], d.day)
-        d += timedelta(days=1)
-    if current is not None:
-        segments.append(current)
-
-    parts = []
-    for (year, month), d_start, d_end in segments:
-        if d_start == d_end:
-            parts.append(f"(year = '{year}' AND month = '{month}' AND day = '{d_start:02d}')")
-        else:
-            parts.append(
-                f"(year = '{year}' AND month = '{month}' AND day BETWEEN '{d_start:02d}' AND '{d_end:02d}')"
-            )
-    return " OR ".join(parts)
 
 
 def summary_for(session, database, workgroup, catalog, table, start, end, region) -> pd.Series:

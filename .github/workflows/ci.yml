@@ -1,0 +1,106 @@
+name: CI
+
+# The branches push to this repo by default; branch protection or a cron can
+# also drive nightly runs.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    # Enable if you want the analysis to re-run automatically on your own data.
+    # Requires the AWS_* secrets below.
+    - cron: "0 6 * * 1"
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  terraform:
+    name: Terraform validate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+      - name: terraform fmt
+        run: terraform fmt -check -recursive
+      - name: terraform init
+        run: terraform init -backend=false -input=false
+      - name: terraform validate
+        run: terraform validate
+      - name: terraform plan (no creds path)
+        # A plan would need AWS creds; validate + fmt is the CI gate here.
+        if: false
+        run: terraform plan -input=false -out=plan.tfplan
+
+  python:
+    name: Python lint, unit + chart smoke test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: analysis
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install deps
+        run: pip install -r ../requirements.txt
+      - name: Compile
+        run: python -m py_compile partition_utils.py run_analysis.py
+      - name: Unit test partition predicate
+        run: python -m unittest tests.test_partition_predicate
+      - name: Chart render smoke test (synthetic — no AWS needed)
+        run: python tests/test_chart_smoke.py
+        env:
+          CI: "1"
+
+  analysis:
+    name: Real analysis (against your AWS/Athena)
+    # Only when the caller has provided AWS credentials + the experiment dates.
+    # Green by default; guarded behind a manual dispatch + secret check so the
+    # showcase repo never requires secrets to pass CI.
+    if: ${{ github.event_name == 'workflow_dispatch' && secrets.AWS_ACCESS_KEY_ID != '' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: analysis
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install deps
+        run: pip install -r ../requirements.txt
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+      - name: Run analysis
+        run: >
+          python run_analysis.py
+          --busy-region ${{ vars.BUSY_REGION || 'us-east-1' }}
+          --quiet-region ${{ vars.QUIET_REGION || 'eu-west-2' }}
+          --baseline-start ${{ vars.BASELINE_START }}
+          --baseline-end ${{ vars.BASELINE_END }}
+          --heartbeat-start ${{ vars.HEARTBEAT_START }}
+          --heartbeat-end ${{ vars.HEARTBEAT_END }}
+          --out delay_comparison.png
+      - name: Upload chart
+        uses: actions/upload-artifact@v4
+        with:
+          name: delay-comparison
+          path: analysis/delay_comparison.png
