@@ -15,6 +15,20 @@ env:
   PYTHON_VERSION: "3.12"
 
 jobs:
+  workflow-lint:
+    name: Lint workflows (actionlint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install actionlint
+        run: |
+          curl -sL -o /tmp/actionlint.tar.gz \
+            "https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz"
+          tar xzf /tmp/actionlint.tar.gz -C /tmp
+          /tmp/actionlint --version
+      - name: Lint
+        run: /tmp/actionlint .github/workflows/
+
   terraform:
     name: Terraform validate
     runs-on: ubuntu-latest
@@ -56,15 +70,19 @@ jobs:
         env:
           CI: "1"
 
-  # Real data analysis is opt-in: only on manual dispatch, and only if AWS
-  # creds are configured (checked at the STEP level, where `secrets` is legal —
-  # the `secrets` context is NOT available in a job-level `if`, which is why
-  # this is a step gate and not a job gate).
+  # Real-data analysis. Opt-in (manual dispatch only) and, to keep CI green
+  # without credentials, gated on an env guard. NOTE: the `secrets` context is
+  # NOT available inside `if:` expressions (job- OR step-level), so the
+  # credential presence check is hoisted into a job-level env var — which is
+  # where `secrets` IS legal.
   analysis:
     name: Real analysis (against your AWS/Athena)
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     environment: aws
+    env:
+      HAS_AWS_CREDS: ${{ secrets.AWS_ACCESS_KEY_ID != '' }}
+      PYTHON_VERSION: "3.12"
     defaults:
       run:
         working-directory: analysis
@@ -73,20 +91,17 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
       - name: Install deps
         run: pip install -r ../requirements.txt
       - name: Configure AWS credentials
-        if: ${{ secrets.AWS_ACCESS_KEY_ID != '' }}
+        if: env.HAS_AWS_CREDS == 'true'
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
       - name: Run analysis
-        if: ${{ secrets.AWS_ACCESS_KEY_ID != '' }}
+        if: env.HAS_AWS_CREDS == 'true'
         run: >
           python run_analysis.py
           --busy-region ${{ vars.BUSY_REGION || 'us-east-1' }}
@@ -97,7 +112,7 @@ jobs:
           --heartbeat-end ${{ vars.HEARTBEAT_END }}
           --out delay_comparison.png
       - name: Upload chart
-        if: ${{ secrets.AWS_ACCESS_KEY_ID != '' }}
+        if: env.HAS_AWS_CREDS == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: delay-comparison
