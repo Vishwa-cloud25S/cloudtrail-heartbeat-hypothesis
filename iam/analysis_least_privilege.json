@@ -1,0 +1,69 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "Identity",
+      "Effect": "Allow",
+      "Action": ["sts:GetCallerIdentity", "iam:GetUser"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "CloudTrailRead",
+      "Effect": "Allow",
+      "Action": [
+        "cloudtrail:GetTrailStatus",
+        "cloudtrail:DescribeTrails",
+        "cloudtrail:LookupEvents"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "AthenaQuery",
+      "Effect": "Allow",
+      "Action": [
+        "athena:StartQueryExecution",
+        "athena:GetQueryExecution",
+        "athena:GetQueryResults",
+        "athena:GetWorkGroup",
+        "athena:ListWorkGroups",
+        "athena:ListQueryExecutions",
+        "athena:StopQueryExecution"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "GlueTableRead",
+      "Effect": "Allow",
+      "Action": ["glue:GetTable", "glue:GetDatabase", "glue:GetTables", "glue:GetDatabases"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ReadCloudTrailBucket",
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:ListBucket", "s3:GetBucketLocation"],
+      "Resource": [
+        "arn:aws:s3:::*AWSLogs*",
+        "arn:aws:s3:::*cloudtrail*"
+      ]
+    },
+    {
+      "Sid": "ReadAthenaResultsBucket",
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:ListBucket", "s3:PutObject"],
+      "Resource": [
+        "arn:aws:s3:::*athena*"
+      ]
+    },
+    {
+      "Sid": "ControlHeartbeatScheduler",
+      "Effect": "Allow",
+      "Action": [
+        "scheduler:GetSchedule",
+        "scheduler:ListSchedules",
+        "scheduler:StartSchedule",
+        "scheduler:StopSchedule"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

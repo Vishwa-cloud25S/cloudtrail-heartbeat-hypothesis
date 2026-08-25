@@ -115,10 +115,14 @@ resource "aws_lambda_permission" "heartbeat_scheduler" {
 # Rate(1 minute) — the minimum supported by EventBridge Scheduler. The Lambda
 # runs HEARTBEATS_PER_INVOCATION (2) passes spaced HEARTBEAT_INTERVAL_SECONDS
 # (30s) apart, giving an effective 30s cadence.
+#
+# state = DISABLED so the baseline (noise-OFF) window is clean. Enable it by
+# hand once the baseline has accumulated:
+#     aws scheduler start-schedule --name <prefix>-heartbeat-schedule
 resource "aws_scheduler_schedule" "heartbeat" {
   name                = "${var.project_prefix}-heartbeat-schedule"
   description         = "Inject periodic CloudTrail noise into quiet regions to test Tracebit's delivery-latency hypothesis"
-  state               = "ENABLED"
+  state               = "DISABLED"
   schedule_expression = "rate(1 minute)"
   flexible_time_window {
     mode = "OFF"

@@ -87,32 +87,52 @@ renders the chart from synthetic data as an AWS-free smoke test. The optional
 experiment dates as repo secrets/vars — so the showcase repo never requires
 secrets just to pass CI.
 
+### IAM / least-privilege
+
+Use a **dedicated sandbox account** and a **least-privilege analysis policy** —
+see [`iam/`](iam/) for an exact ready-to-attach policy (read/query only) and the
+provisioning guidance. Never use a root key.
+
+### Recording results
+
+Once data is in, fill in [`docs/RESULT_template.md`](docs/RESULT_template.md)
+and replace the synthetic placeholder chart with the real one.
+
 ## Setup
 
-### 1. Provision
+### 0. Authenticate (do this on YOUR machine — never paste keys into chat)
+
+`aws configure sso` (recommended) or `aws configure`. You only need credentials;
+they never touch this repo or a chat thread.
+
+### 1. Provision + get your date windows (one command)
 
 ```bash
-cd terraform
-terraform init
-# edit variables.tf — set a unique project_prefix, your busy + quiet regions
-terraform plan -out plan.tfplan
-terraform apply plan.tfplan
+chmod +x scripts/start_experiment.sh
+./scripts/start_experiment.sh
+# or set regions explicitly:
+BUSY_REGION=us-east-1 QUIET_REGION=eu-west-2 ./scripts/start_experiment.sh
 ```
 
-You must run this in a region/account where you already have *some* activity for
-the "busy" side; otherwise pick a second quiet region as the control.
+This applies the Terraform (multi-region trail, S3, Athena partition-projection
+table, heartbeat Lambda + scheduler) and **prints the exact baseline/treatment
+date windows + the ready-to-run analysis command.** It's idempotent and safe to
+re-run.
+
+> The heartbeat scheduler is provisioned **DISABLED** so your baseline
+> (noise-OFF) window is clean. You enable it by hand at the end of baseline.
 
 ### 2. Confirm CloudTrail is delivering (allow ~10 min for logs to appear)
 
 `aws glue get-table --database-name cloudtrail_latency --name cloudtrail_logs`
 then a quick sanity query in Athena or via the scripts below.
 
-### 3. Before you start the heartbeat — take the baseline
+### 3. Let the baseline accumulate (24–48h, scheduler still OFF)
 
-Pick a window of at least 24–48h **before** you enable the scheduler. Note the
-dates. Do **not** enable the heartbeat during this window.
+Do **not** enable the heartbeat during this window. Record the dates the script
+printed.
 
-### 4. Start the noise
+### 4. Start the noise (end of baseline)
 
 ```bash
 aws scheduler start-schedule --name <prefix>-heartbeat-schedule
