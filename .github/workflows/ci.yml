@@ -5,7 +5,30 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Manual trigger runs the real-data analysis. It prompts for the experiment
+  # windows; regions default to the repo's expectations.
   workflow_dispatch:
+    inputs:
+      busy_region:
+        description: "Busy (control) region"
+        required: true
+        default: "us-east-1"
+      quiet_region:
+        description: "Quiet region (noise injection target)"
+        required: true
+        default: "eu-west-2"
+      baseline_start:
+        description: "Baseline window start (noise OFF) — YYYY/MM/dd"
+        required: true
+      baseline_end:
+        description: "Baseline window end (noise OFF) — YYYY/MM/dd"
+        required: true
+      heartbeat_start:
+        description: "Heartbeat window start (noise ON) — YYYY/MM/dd"
+        required: true
+      heartbeat_end:
+        description: "Heartbeat window end (noise ON) — YYYY/MM/dd"
+        required: true
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -70,16 +93,15 @@ jobs:
         env:
           CI: "1"
 
-  # Real-data analysis. Opt-in (manual dispatch only) and, to keep CI green
-  # without credentials, gated on an env guard. NOTE: the `secrets` context is
-  # NOT available inside `if:` expressions (job- OR step-level), so the
-  # credential presence check is hoisted into a job-level env var — which is
-  # where `secrets` IS legal.
+  # Real-data analysis. Runs only on manual dispatch (so pushes/PRs stay
+  # green without credentials). The experiment windows are required inputs
+  # prompted in the Actions UI. The credential check is hoisted into a job env
+  # var (the `secrets` context is NOT legal inside `if:`), and we fail loudly
+  # if creds are missing rather than silently skipping.
   analysis:
     name: Real analysis (against your AWS/Athena)
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    environment: aws
     env:
       HAS_AWS_CREDS: ${{ secrets.AWS_ACCESS_KEY_ID != '' }}
       PYTHON_VERSION: "3.12"
@@ -93,26 +115,30 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: Install deps
         run: pip install -r ../requirements.txt
+      - name: Require AWS credentials
+        if: env.HAS_AWS_CREDS != 'true'
+        run: |
+          echo "::error::AWS credentials are not configured. Add repo secrets \
+AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY and AWS_REGION (Settings > Secrets \
+and variables > Actions), then re-run this workflow."
+          exit 1
       - name: Configure AWS credentials
-        if: env.HAS_AWS_CREDS == 'true'
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+          aws-region: ${{ inputs.busy_region }}
       - name: Run analysis
-        if: env.HAS_AWS_CREDS == 'true'
         run: >
           python run_analysis.py
-          --busy-region ${{ vars.BUSY_REGION || 'us-east-1' }}
-          --quiet-region ${{ vars.QUIET_REGION || 'eu-west-2' }}
-          --baseline-start ${{ vars.BASELINE_START }}
-          --baseline-end ${{ vars.BASELINE_END }}
-          --heartbeat-start ${{ vars.HEARTBEAT_START }}
-          --heartbeat-end ${{ vars.HEARTBEAT_END }}
+          --busy-region ${{ inputs.busy_region }}
+          --quiet-region ${{ inputs.quiet_region }}
+          --baseline-start ${{ inputs.baseline_start }}
+          --baseline-end ${{ inputs.baseline_end }}
+          --heartbeat-start ${{ inputs.heartbeat_start }}
+          --heartbeat-end ${{ inputs.heartbeat_end }}
           --out delay_comparison.png
       - name: Upload chart
-        if: env.HAS_AWS_CREDS == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: delay-comparison
